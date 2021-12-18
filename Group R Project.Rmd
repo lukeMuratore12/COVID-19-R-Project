@@ -1,0 +1,152 @@
+---
+title: " The Correlation Between Obesity Rates and COVID-19 Contraction and Death Rates"
+author: "Grace Bentivenga, Joseph Dunkin, Luke Muratore, Rithik Sebastian, Brian Yant"
+output: html_document
+fig_width: 3
+fig_height: 2
+---
+
+```{r message=TRUE, warning=TRUE, include=FALSE}
+library(dplyr)
+library(janitor)
+library(gganimate)
+library(gifski)
+library(png)
+library(plyr)
+library(readr)
+library(ggplot2)
+library(tidyverse)
+library(ggrepel)
+library(scales)
+library(gapminder)
+library(shinyWidgets)
+library(data.table)
+library(ggplot2)
+library(gganimate)
+library(knitr)
+```
+Introduction:
+The primary focus of investigation for this study will be the correlation between COVID-19 cases and deaths with obesity rate. Our study will focus primarily on obesity rate and COVID-19 cases/deaths by state. In regards to the data used, we will be extracting data from two primary databases. In regards to COVID-19 data, we will be using the COVID-19 Dataset curated by Johns Hopkins University: JHU COVID-19 Dataset. In regards to obesity rates and population densities, we will be extracting data from Statistica to obtain obesity rates by state to compare with the COVID-19 data. To pick our states to best analyze the correlation between obesity and contraction or death from COVID-19, we first need to analyze which states have extreme obesity rates. 
+```{r}
+path_obesity <- "./Obesity_Rates.csv"
+obesity <- read.csv(path_obesity)
+obesity[c(1, 50),]
+```
+
+
+As seen in the table above, Mississippi and Colorado have vastly different obesity rates. As of 2019 according to Statistica, adults in Mississippi had an obesity rate of 40.8%, which is the highest obesity rate in the country. In contrast, Colorado had an obesity rate of 23.8%, making it the lowest obesity rate in the country. These polar opposite obesity rates are important to more clearly illustrate any correlation of COVID-19 cases and deaths as any impact obesity has on these statistics will be more clearly shown in these two states. While Mississippi and Colorado have obesity rates on opposite sides of the spectrum, their population density is very similar. 
+
+```{r}
+path_pd <- "./Population_Density.csv"
+pd <- read.csv(path_pd)
+pd[c(32, 36),]
+```
+
+```{r fig1, fig.height = 10/3, fig.width = 5}
+plot(1:50, pd$Population_Density, xlab="States", ylab="Obesity Rates", type = "h",)
+ms_pd = pd %>% filter(State == "Mississippi")
+co_pd = pd %>% filter(State == "Colorado")
+abline(h = ms_pd$Population_Density, col = "red") # abline for Mississippi
+abline(h = co_pd$Population_Density, col = "blue") # abline for Colorado
+```
+
+As you can see, both Colorado and Mississippi have relatively similar population density per square mile. Their similar population density prevents any discrepancies in regards to COVID-19 infection rate comparisons, as states with higher population densities will often have higher rates of infection due to more close contact with more people as is the nature of a high population density. Having similar population densities eliminates the possibility of this particular inaccuracy throughout the investigation. This in conjunction with their vastly different obesity rates make these two states appealing to conduct analysis on, and therefore our study will primarily focus on comparisons between Mississippi and Colorado.  In this study we will address two primary questions:
+
+1: Is there a correlation between obesity rates and likelihood of contracting COVID-19? This question is important as it helps one understand more clearly the reasons behind COVID-19 infection rates, and possibly an explanation on why the United States is more susceptible to infection in comparison to other countries. 
+
+2: Does obesity increase the chances of an individual dying from COVID-19? Through identifying potential causes of deaths from COVID-19, medical professionals may develop more preventative measures to reduce the death rate and help better treat patients.
+
+```{r, include = FALSE}
+path_US_Death <- "./Covid_Project/COVID-19-master_March12/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv"
+path_US_confirmed <- "./Covid_Project/COVID-19-master_March12/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"
+
+deaths <- read.csv(path_US_Death) #Reads in Deaths Over Time csv
+cases <- read.csv(path_US_confirmed) #Reads in Cases Over Time csv
+
+cases = cases %>% select("Province_State" | starts_with("X"))
+
+deaths = deaths %>% select("Province_State" | starts_with("X"))
+
+cases = cases %>% group_by(Province_State) %>% dplyr::summarise(across(starts_with("X"), sum))
+
+deaths = deaths %>% group_by(Province_State) %>% dplyr::summarise(across(starts_with("X"), sum))
+```
+
+```{r, include = FALSE}
+setDT(cases)
+cases = cases %>% melt(cases, id=c("Province_State"), measure=patterns("^X"), value.name="Cases", variable.name="Date")
+setDT(deaths)
+deaths = deaths %>% melt(deaths, id=c("Province_State"), measure=patterns("^X"), value.name="Deaths", variable.name="Date")
+cases$Date = as.Date(cases$Date, format="X%m.%d.%y")
+deaths$Date = as.Date(deaths$Date, format="X%m.%d.%y")
+covid <- merge(cases, deaths, by=c("Province_State", "Date"))
+ms <- "Mississippi"
+co <- "Colorado"
+ms_covid = covid %>% filter(Province_State == ms)
+co_covid = covid %>% filter(Province_State == co)
+```
+
+```{r fig2, fig.height = 10/3, fig.width = 5}
+cases_plt_ms = ggplot( ms_covid,
+                    aes(x=Date,y=Cases)) + 
+  geom_point(show.legend = FALSE, alpha = .7) + 
+  labs(x="Date", 
+       y="Cases", 
+       title=paste("COVID Cases Over Time For", ms)) 
+plot(cases_plt_ms)
+```
+
+
+```{r fig3, fig.height = 10/3, fig.width = 5}
+deaths_plt_ms = ggplot( ms_covid, 
+                     aes(x=Date,y=Deaths)) +
+  geom_point(show.legend = FALSE, alpha = .7) + 
+  labs(x="Date",
+       y="Deaths",
+       title=paste("COVID Deaths Over Time For", ms))
+plot(deaths_plt_ms)
+```
+
+```{r fig4, fig.height = 10/3, fig.width = 5}
+cases_plt_co = ggplot( co_covid,
+                    aes(x=Date,y=Cases)) + 
+  geom_point(show.legend = FALSE, alpha = .7) + 
+  labs(x="Date", 
+       y="Cases", 
+       title=paste("COVID Cases Over Time For", co)) 
+plot(cases_plt_co)
+```
+
+```{r fig5, fig.height = 10/3, fig.width = 5}
+deaths_plt_co = ggplot( co_covid, 
+                     aes(x=Date,y=Deaths)) +
+  geom_point(show.legend = FALSE, alpha = .7) + 
+  labs(x="Date",
+       y="Deaths",
+       title=paste("COVID Deaths Over Time For", co))
+plot(deaths_plt_co)
+```
+
+Answer to Question 1:
+We can observe a couple of things from the two graphs on COVID-19 cases over time for both Mississippi (high obesity rate) and Colorado (low obesity rate). The first thing we can observe that as of the last recorded data point in this dataset, March 12th, 2021, we can see that Colorado actually has >100k more COVID-19 cases than Mississippi. Seeing this, one might infer that since Colorado has more COVID-19 cases than Mississippi, that an increase in obesity rates in a state results in a decrease in COVID-19 cases. While this may look plausible, one must understand that while the population densities of the two states in question are very similar, their populations are not. In fact, the population of Mississippi is approximately half that of Colorado. To be able to compare the two states, we could double the number of total cases of Mississippi and compare that to the current number of cases in Colorado. Doing this shows us that proportionally, more Mississippians contracted COVID-19 than Coloradans. This implies that there may be a positive correlation between obesity rate and COVID-19 contraction rates.
+
+Answer to Question 2:
+Our data of the deaths and cases in Mississippi and Colorado does suggest that obesity could increase the likelihood of an individual dying from COVID-19. Mississippi is the most obese state with 40.8% of the population considered obese, while Colorado is the least obese state with 23.8% of the population considered obese. Despite Colorado having more total cases (almost 450,000 compared to Mississippi’s approximately 300,000,) Mississippi had more deaths due to COVID (around 7,000 compared to 6,000). This suggests that Missisippi has a much higher COVID mortality rate than Colorado, and since Mississippi is significantly more obese than Colorado, obesity could be one of the main causes. Although we controlled for population density, there are other confounding factors that could affect this mortality rate, such as healthcare, average age, poverty level etc. That is to say, obesity is not the only factor that could explain the difference in mortality rates between the two states. Also, in future experiments, we could take a larger sample size in order to see a greater distinction between COVID deaths between states. To better study this question, we would need a study where we controlled for more possible confounding variables, and our study must have a much larger sample size. 
+
+Conclusion:
+In conclusion, we determined that obesity does have an impact in increasing the severity of the COVID-19. These conclusions were also determined by the center for disease control and prevention where they found that there is a nonlinear relationship between body mass index (BMI) and COVID-19 severity, with the lowest risks near healthy BMI and increasing severity with higher BMI (CDC, 2020).
+
+Future Work:
+Although we are able to make these conclusions from the analysis of Mississippi and Colorado, next time we can take into consideration a larger sample size in order to work towards a less biased conclusion.  Of course, we can also consider many other factors in why different states have more COVID-19 cases than others, so in future experiments we could possibly take a larger sample size of obese, non-obese, and control states. 
+
+Sources:
+
+Statista. “Percentage of Obese U.S. Adults by State 2019.” Statista, 29 Apr. 2021, 
+www.statista.com/statistics/378988/us-obesity-rate-by-state.
+
+Statista. “Population Density in the U.S., by State 2020.” Statista, 21 Jan. 2021, www.statista.com/statistics/183588/population-density-in-the-federal-states-of-the-us.
+
+Kompaniyets L, Goodman AB, Belay B, et al. Body Mass Index and Risk for COVID-19–Related Hospitalization, Intensive Care Unit Admission, Invasive Mechanical Ventilation, and Death — United States, March–December 2020. MMWR Morb Mortal Wkly Rep 2021;70:355–361. DOI: http://dx.doi.org/10.15585/mmwr.mm7010e4.
+
+
+

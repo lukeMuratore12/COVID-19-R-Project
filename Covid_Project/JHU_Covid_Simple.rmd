@@ -1,0 +1,202 @@
+---
+title: "JHU Covid Data Visualization"
+author: "Sagar Saxena (ssaxena1@terpmail.umd.edu)"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes  
+  pdf_document:
+    toc: yes
+---
+# Simple COVID Data Exploration
+
+This notebook is intended to be a simple notebook that utilizes the COVID 19 dataset. Hopefully this notebook helps clarify some of the code in this notebook with comments and latex/markdown cells. 
+
+```{r message=TRUE, warning=TRUE, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(janitor)
+library(gganimate)
+library(gifski)
+library(png)
+library(ggrepel)
+library(scales)
+library(gapminder)
+library(shinyWidgets)
+library(data.table)
+```
+
+## Reading The Data
+
+To read the data we need to provide the paths to the csv files that we will use. Specifically, we want:
+
+* US Deaths Over Time - time_series_covid19_deaths_US.csv
+* US Confirmed Cases Over Time - time_series_covid19_confirmed_US.csv
+
+The paths below are relative; the "./" translates to current directory so if you are running this code you would want your file structure to look like this
+
+* parent_dir
+  * JHU_Covid_Simple.rmd
+  * Covid_Stat400 Directory
+    * COVID-19-master_Nov3
+      * csse_covid_19_data
+        * csse_covid_19_time_series
+          * the csv files are here
+          
+Note: Some of the lines below that display dataframes have been commented to make this notebook knit friendly. If you are running this notebook within RStudio, you should uncomment the lines so you can see how the dataframes change as we process the data
+
+```{r}
+path_US_Death <- "./COVID-19-master_Nov3/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv"
+path_US_confirmed <- "./COVID-19-master_Nov3/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"
+
+deaths <- read.csv(path_US_Death) #Reads in Deaths Over Time csv
+cases <- read.csv(path_US_confirmed) #Reads in Cases Over Time csv
+
+#The lines below have been commented to make the output knit friendly
+head(deaths) #Displays the first few rows of our dataset
+head(cases) #uncomment to see dataframe in RStudio
+```
+
+Looking at a small sample of this data, we can see its quite messy. It contains many features and dates are represented as column headers. This is not ideal and we should preprocess this data to tidy it.
+
+## Data Preprocessing
+
+### Filter Columns
+Let's first filter the data to only include the relevant columns. The select command allows us to filter on select columns. Let's make a simplifying assumption that we are only concerned with data per state over time. For this we would need only the Province_State column and columns that start with the letter X (for dates).
+
+```{R}
+cases = cases %>% select("Province_State" | starts_with("X"))
+head(cases) #uncomment to see dataframe in RStudio
+
+deaths = deaths %>% select("Province_State" | starts_with("X"))
+head(deaths) #uncomment to see dataframe in RStudio
+```
+
+### Group By State
+
+Now that we have dropped all unnecessary features, the next issue is that we have multiple rows for each state. It makes sense that we should group these rows together based on Province_State and sum the values in each cell.
+
+The group_by function groups a dataframe by a specific variable (in our case Province_State) and the summarize function aggregates all columns starting with an X.
+
+```{r}
+cases = cases %>% group_by(Province_State) %>% dplyr::summarise(across(starts_with("X"), sum))
+#head(cases) #uncomment to see dataframe in RStudio
+
+deaths = deaths %>% group_by(Province_State) %>% dplyr::summarise(across(starts_with("X"), sum))
+#head(deaths) #uncomment to see dataframe in RStudio
+```
+
+### Melt Columns
+
+The next step is to melt the columns for date. A good dataset shouldn't have a column for each date. It makes more sense for us to have a row for each state and date combination. The process of taking multiple columns and converting it into two columns (one for the column name and the other for the value) is called melting. 
+
+Let's do this with the data that we have by using the melt command from the data.table library. The id is the variable we intend to keep (Province State), measure is the columns we want to melt (anything that starts with X), value is the name of the data in the table (Cases/Deaths) and variable is the name of what the column headers represent (Dates).
+
+```{r}
+setDT(cases)
+cases = cases %>% melt(cases, id=c("Province_State"), measure=patterns("^X"), value.name="Cases", variable.name="Date")
+head(cases)
+
+setDT(deaths)
+deaths = deaths %>% melt(deaths, id=c("Province_State"), measure=patterns("^X"), value.name="Deaths", variable.name="Date")
+head(deaths)
+```
+
+### Convert Dates
+
+Let's take one final step to clean our data. All of the dates are represented as Xmonth.date.year format, but this is not a great format for R. To remedy this, let's convert all the dates to a proper date format.
+
+```{r}
+cases$Date = as.Date(cases$Date, format="X%m.%d.%y")
+head(cases)
+
+deaths$Date = as.Date(deaths$Date, format="X%m.%d.%y")
+head(deaths)
+```
+
+### Merging Two Tables
+
+We want to merge our two tables of deaths and cases so that they show up on a single dataframe. To do this we can observe that the state and date should always match when we are merging.
+
+The merge command takes our two dataframes as inputs and the "by" argument specifies what columns we are joining on.
+
+```{R}
+covid <- merge(cases, deaths, by=c("Province_State", "Date"))
+head(covid)
+```
+
+## Data Exploration
+
+Now that our data has been cleaned, let's do some really quick data exploration. Let's write some code that creates a plot of COVID cases and deaths for a specific state.
+
+### Filter Rows
+
+To do this we would want to first filter the rows of our dataset to only include data for Maryland. The filter command allows us to pass a condition that only includes specific rows. In our case, the condition is that the Province State should be the specified state. 
+
+```{r}
+state = "Maryland"
+
+state_covid = covid %>% filter(Province_State == state)
+head(state_covid)
+```
+
+### Create Plots
+
+Using our filtered data, we can plot the date column against the cases/deaths column of the respective data frames. We can use the same plot command that we have been using throughout the semester and specify the Date column as the x variable and the Cases/Deaths columns as the y variable. 
+
+R automatically detects the dates because of the step we took earlier to format the dates in a way that is interpretable to R. 
+
+```{r}
+plot(state_covid$Date, state_covid$Cases, xlab="Time", ylab="Cases", col="red")
+title(paste("Covid Cases Over Time For", state))
+
+plot(state_covid$Date, state_covid$Deaths, xlab="Time", ylab="Deaths", col="blue")
+title(paste("Covid Deaths Over Time For", state))
+```
+
+### Animate Plots
+
+There have also been a lot of examples that have animated the data so let's take one final step to animate the trends we saw above. To animate the trends, we can use the ggplot2 and gganimate libraries. Let's first use ggplot to draw out the trends:
+
+```{R}
+library(ggplot2)
+library(gganimate)
+theme_set(theme_bw())
+
+cases_plt = ggplot( state_covid, #The dataframe we are using to create the plot
+                    aes(x=Date,y=Cases)) + #The x and y variables
+  geom_point(show.legend = FALSE, alpha = .7) + #What each point looks like
+  labs(x="Date", #Label of X Axis
+       y="Cases", #Label of Y Axis
+       title=paste("COVID Cases Over Time For", state)) #Title
+plot(cases_plt)
+
+#Repeat Procedure For Deaths
+deaths_plt = ggplot( state_covid, 
+                     aes(x=Date,y=Deaths)) +
+  geom_point(show.legend = FALSE, alpha = .7) + 
+  labs(x="Date",
+       y="Deaths",
+       title=paste("COVID Deaths Over Time For", state))
+
+plot(deaths_plt)
+```
+
+Now that we have our ggplots, we can use transition_time to animate across the Date Variable.
+
+```{R}
+cases_plt + 
+  transition_time(Date) + #Allows us to animate our data
+  labs(title = "Date: {frame_time}") + #Adds a Title With the Date On The Top
+  shadow_mark(alpha = 1, size = 0.5) #Leaves Data From Old Dates Behind
+```
+
+We can do the same for the plot for deaths:
+
+```{R}
+deaths_plt + 
+  transition_time(Date) + 
+  labs(title = "Date: {frame_time}") +
+  shadow_mark(alpha = 1, size = 0.5) 
+```
