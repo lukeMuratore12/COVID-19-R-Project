@@ -1,3 +1,5 @@
+# This is the exact R code from the R markdown file, here for extra clarity
+
 library(dplyr)
 library(janitor)
 library(gganimate)
